@@ -349,14 +349,13 @@ def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_
             print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
             print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
 
-            train_fn = None
-            test_fn = None
-
-            train_fn, test_fn = get_fns(network, input_var, target_var)
-
-
         train_data = None
         test_data = None
+
+        train_fn = None
+        test_fn = None
+
+        train_fn, test_fn = get_fns(network, input_var, target_var)
 
         print ("FINAL TEST SET STATS FOR FOLD %d:" % (k))
         print ("validation loss:\t\t{:.6f}".format(val_err / val_batches))
