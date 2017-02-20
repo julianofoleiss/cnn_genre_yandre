@@ -160,8 +160,8 @@ def build_cnn(input_var=None):
     #         nonlinearity=lasagne.nonlinearities.rectify)
 
     network = lasagne.layers.DenseLayer(
-        network,
-        num_units=256,
+        lasagne.layers.dropout(network, p=.5),
+        num_units=512,
         nonlinearity=lasagne.nonlinearities.rectify # maybe softmax?
     )
 
@@ -172,7 +172,7 @@ def build_cnn(input_var=None):
     #         nonlinearity=lasagne.nonlinearities.softmax)
 
     network = lasagne.layers.DenseLayer(
-        network,
+	lasagne.layers.dropout(network, p=.5),
         num_units=10,
         nonlinearity=lasagne.nonlinearities.softmax
     )
@@ -210,7 +210,7 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
-def main(model='mlp', num_epochs=500, meta_file="meta_jgtzan100_z120.txt", batch_size=50):
+def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_size=500):
     # Load the dataset
     #print("Loading data...")
     #X_train, y_train, X_val, y_val, X_test, y_test = load_dataset(specgram_dir)
@@ -322,7 +322,7 @@ def main(model='mlp', num_epochs=500, meta_file="meta_jgtzan100_z120.txt", batch
             train_err = 0
             train_batches = 0
 
-            for batch_data, batch_labels in iterate_minibatches(train_data, labels[train_idx], batchsize=batch_size):
+            for batch_data, batch_labels in iterate_minibatches(train_data, labels[train_idx], batchsize=batch_size, shuffle=True):
                 train_err += train_fn(batch_data, batch_labels)
                 train_batches+=1
 
@@ -330,7 +330,7 @@ def main(model='mlp', num_epochs=500, meta_file="meta_jgtzan100_z120.txt", batch
             val_acc = 0
             val_batches = 0
 
-            for batch_data, batch_labels in iterate_minibatches(test_data, labels[test_idx], batchsize=batch_size):
+            for batch_data, batch_labels in iterate_minibatches(test_data, labels[test_idx], batchsize=batch_size, shuffle=True):
                 err, acc = val_fn(batch_data, batch_labels)
                 val_err+=err
                 val_acc+=acc
