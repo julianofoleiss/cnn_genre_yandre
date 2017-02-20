@@ -210,28 +210,8 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
-def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_size=500):
-    # Load the dataset
-    #print("Loading data...")
-    #X_train, y_train, X_val, y_val, X_test, y_test = load_dataset(specgram_dir)
-
-    # Prepare Theano variables for inputs and targets
-    input_var = T.tensor4('inputs')
-    target_var = T.ivector('targets')
-
-    # Create neural network model (depending on first command line parameter)
+def get_fns(network, input_var, target_var):
     print("Building model and compiling functions...")
-    if model == 'mlp':
-        network = build_mlp(input_var)
-    elif model.startswith('custom_mlp:'):
-        depth, width, drop_in, drop_hid = model.split(':', 1)[1].split(',')
-        network = build_custom_mlp(input_var, int(depth), int(width),
-                                   float(drop_in), float(drop_hid))
-    elif model == 'cnn':
-        network = build_cnn(input_var)
-    else:
-        print("Unrecognized model type %r." % model)
-        return
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize (for our multi-class problem, it is the cross-entropy loss):
@@ -265,7 +245,33 @@ def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
 
+    return train_fn, val_fn
+
+def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_size=500):
+    # Load the dataset
+    #print("Loading data...")
+    #X_train, y_train, X_val, y_val, X_test, y_test = load_dataset(specgram_dir)
+
+    # Prepare Theano variables for inputs and targets
+    input_var = T.tensor4('inputs')
+    target_var = T.ivector('targets')
+
+    # Create neural network model (depending on first command line parameter)
     
+    if model == 'mlp':
+        network = build_mlp(input_var)
+    elif model.startswith('custom_mlp:'):
+        depth, width, drop_in, drop_hid = model.split(':', 1)[1].split(',')
+        network = build_custom_mlp(input_var, int(depth), int(width),
+                                   float(drop_in), float(drop_hid))
+    elif model == 'cnn':
+        network = build_cnn(input_var)
+    else:
+        print("Unrecognized model type %r." % model)
+        return
+
+    train_fn, val_fn = get_fns(network, input_var, target_var)
+
     #load meta_file
 
     with open(meta_file, 'r') as f:
@@ -342,6 +348,12 @@ def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_
             print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
             print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
             print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
+
+            train_fn = None
+            test_fn = None
+
+            train_fn, test_fn = get_fns(network, input_var, target_var)
+
 
         train_data = None
         test_data = None
