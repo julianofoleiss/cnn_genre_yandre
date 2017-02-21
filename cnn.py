@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """
 Usage example employing Lasagne for digit recognition using the MNIST dataset.
 
@@ -399,7 +397,7 @@ def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z12
 
 
         print("...done!")
-
+        
         for epoch in range(num_epochs):
 
             start_time = time.time()
@@ -451,7 +449,9 @@ def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z12
         print(classification_report(y_true, y_predicted, target_names=get_class_names()))
         print("Confusion Matrix")
         print_cm(confusion_matrix(y_true, y_predicted), get_class_names())
-        
+
+	sys.stdout.flush()        
+
         #print ("FINAL TEST SET STATS FOR FOLD %d:" % (k))
         #print ("validation loss:\t\t{:.6f}".format(val_err / val_batches))
         #print ("validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
