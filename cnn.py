@@ -12,8 +12,6 @@ More in-depth examples and reproductions of paper results are maintained in
 a separate repository: https://github.com/Lasagne/Recipes
 """
 
-from __future__ import print_function
-
 import sys
 import os
 import time
@@ -33,7 +31,7 @@ import time
 import subprocess
 
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
 def print_cm(cm, labels, hide_labels=True, file=None, hide_zeroes=False, hide_diagonal=False, hide_threshold=None):
     """pretty print for confusion matrixes"""
@@ -273,7 +271,7 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 def get_fns(input_var, target_var):
     print("Building model and compiling functions...")
 
-    network = build_cnn(input_var=None)
+    network = build_cnn(input_var)
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize (for our multi-class problem, it is the cross-entropy loss):
@@ -393,12 +391,14 @@ def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z12
         for i in test_idx_f:
             test_idx.extend( (i * slices_per_track) + np.arange(slices_per_track))
 
+        k+=1 
+
+	print("Loading fold %d" % (k))
         train_data = load_dataset(slices_names[train_idx])
         test_data = load_dataset(slices_names[test_idx])
 
-        k+=1 
 
-        print("Loaded fold %d" % (k))
+        print("...done!")
 
         for epoch in range(num_epochs):
 
@@ -420,7 +420,7 @@ def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z12
                 val_acc+=acc
                 val_batches+=1
 
-            if(epoch % 10 == 0)
+            if(epoch % 10 == 0 or epoch == (num_epochs - 1)):
                 # Then we print the results for this epoch:
                 print("Epoch {} of {} took {:.3f}s".format(
                     epoch + 1, num_epochs, time.time() - start_time))
@@ -431,16 +431,24 @@ def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z12
         y_true = []
         y_predicted = []
         
-        for i in test_idx_f:
+
+        print("Testing FOLD %d..." % (k))
+        #print(test_idx_f)
+        for i in xrange(len(test_idx_f)):
+            #print("sample %d" % (i))
             x = test_data[ (i * slices_per_track) + np.arange(slices_per_track) ]
             y = test_fn(x)
-            s = y.sum(axis=1)
+            y = np.array(y)[0]
+            s = y.sum(axis=0)
+            #print(s, s.shape)
             prediction = s.argmax()
             y_predicted.append(prediction)
-            y_true.append(full_labels[i])
+            y_true.append(full_labels[test_idx_f[i]])
+            #print("true: %d, predicted: %d" % (y_true[-1], y_predicted[-1]))
 
         print("Results for FOLD %d:" % (k))
-        print(classification_report(y_true, y_predicted, get_class_names()))
+        print("Accuracy: %.2f" % (accuracy_score(y_true, y_predicted)) )
+        print(classification_report(y_true, y_predicted, target_names=get_class_names()))
         print("Confusion Matrix")
         print_cm(confusion_matrix(y_true, y_predicted), get_class_names())
         
