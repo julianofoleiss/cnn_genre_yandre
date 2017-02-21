@@ -30,7 +30,67 @@ from multiprocess import Pool
 import gc
 import time
 
+import subprocess
+
 from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import classification_report, confusion_matrix
+
+def print_cm(cm, labels, hide_labels=True, file=None, hide_zeroes=False, hide_diagonal=False, hide_threshold=None):
+    """pretty print for confusion matrixes"""
+    #TODO: implementar hide_labels para saida em arquivo
+    columnwidth = max([len(x) for x in labels]+[0]) # 5 is value length
+
+    if hide_labels:
+        columnwidth = 3
+
+    empty_cell = " " * columnwidth
+    # Print header
+    if file is None:
+        print "    " + empty_cell,
+    else:
+        file.write("    " + empty_cell)
+    i = 0
+    for label in labels:
+        if file is None:
+            if hide_labels:
+                print "%{0}d".format(columnwidth) % i,
+            else:
+                print "%{0}s".format(columnwidth) % label,
+        else:
+            file.write("%{0}s".format(columnwidth) % label)
+        i+=1
+    if file is None:
+        print
+    else:
+        file.write("\n")
+    # Print rows
+    for i, label1 in enumerate(labels):
+        if file is None:
+            if hide_labels:
+                print "    %{0}d".format(columnwidth) % i,
+            else:
+                print "    %{0}s".format(columnwidth) % label1,
+        else:
+            file.write("    %{0}s".format(columnwidth) % label1)
+        for j in range(len(labels)):
+            cell = "%{0}d".format(columnwidth) % cm[i, j]
+            if hide_zeroes:
+                cell = cell if float(cm[i, j]) != 0 else empty_cell
+            if hide_diagonal:
+                cell = cell if i != j else empty_cell
+            if hide_threshold:
+                cell = cell if cm[i, j] > hide_threshold else empty_cell
+            if file is None:
+                print cell,
+            else:
+                file.write(cell)
+        if file is None:
+            print
+        else:
+            file.write("\n")
+
+    for i, l in enumerate(labels):
+        print "%d: %s" % (i, l)
 
 def load_image(work):
     i = open(work)
@@ -210,8 +270,10 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
-def get_fns(network, input_var, target_var):
+def get_fns(input_var, target_var):
     print("Building model and compiling functions...")
+
+    network = build_cnn(input_var=None)
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize (for our multi-class problem, it is the cross-entropy loss):
@@ -245,35 +307,22 @@ def get_fns(network, input_var, target_var):
     # Compile a second function computing the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc])
 
-    return train_fn, val_fn
+    test_fn = theano.function([input_var], [test_prediction])
 
-def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_size=500):
-    # Load the dataset
-    #print("Loading data...")
-    #X_train, y_train, X_val, y_val, X_test, y_test = load_dataset(specgram_dir)
+    print("...done!")
 
-    # Prepare Theano variables for inputs and targets
-    input_var = T.tensor4('inputs')
-    target_var = T.ivector('targets')
+    return train_fn, val_fn, test_fn, network
 
-    # Create neural network model (depending on first command line parameter)
-    
-    if model == 'mlp':
-        network = build_mlp(input_var)
-    elif model.startswith('custom_mlp:'):
-        depth, width, drop_in, drop_hid = model.split(':', 1)[1].split(',')
-        network = build_custom_mlp(input_var, int(depth), int(width),
-                                   float(drop_in), float(drop_hid))
-    elif model == 'cnn':
-        network = build_cnn(input_var)
-    else:
-        print("Unrecognized model type %r." % model)
-        return
+def reset_weights(network):
+    params = lasagne.layers.get_all_params(network, trainable=True)
+    for v in params:
+        val = v.get_value()
+        if(len(val.shape) < 2):
+            v.set_value(lasagne.init.Constant(0.0)(val.shape))
+        else:
+            v.set_value(lasagne.init.GlorotUniform()(val.shape))
 
-    train_fn, val_fn = get_fns(network, input_var, target_var)
-
-    #load meta_file
-
+def load_meta(meta_file):
     with open(meta_file, 'r') as f:
         content = f.readlines()
 
@@ -284,10 +333,6 @@ def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_
         d = track.split("\t")
         names.append(d[0])
         labels_text.append(d[1].strip())
-    
-    skf = StratifiedKFold(n_splits=10)
-
-    names = np.array(names)
     
     label_codes = {
         'blues': 0,
@@ -304,23 +349,56 @@ def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_
 
     labels = []
     for i in labels_text:
-        labels.append(label_codes[i])
+        labels.append(label_codes[i])    
 
+    names = np.array(names)
     labels = np.array(labels, dtype='int32')
+    
+    return names, labels
+
+def get_class_names():
+    return ['blues', 'classical', 'country', 'disco', 'hiphop', 'jazz', 'metal', 'pop', 'reggae', 'rock']
+
+def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z120.txt", 
+    meta_full_file="meta_jgtzan100_z120.txt", batch_size=500, slices_per_track=50):
+
+
+    # Prepare Theano variables for inputs and targets
+    input_var = T.tensor4('inputs')
+    target_var = T.ivector('targets')
+
+    # Create neural network model (depending on first command line parameter)
+    
+    train_fn, val_fn, test_fn, network = get_fns(input_var, target_var)
+
+    #load meta_file(s)
+
+    slices_names, slices_labels = load_meta(meta_slices_file)
+    full_names, full_labels = load_meta(meta_full_file)
+
+    skf = StratifiedKFold(n_splits=10)
+
     #print(labels)
 
-    k = 1
+    k = 0
 
-    for train_idx, test_idx in skf.split(names, labels):
-        train_data = load_dataset(names[train_idx])
-        test_data = load_dataset(names[test_idx])
+    for train_idx_f, test_idx_f in skf.split(full_names, full_labels):
 
-        print("train data: ", train_data.shape)
-        print("test data: ", test_data.shape)
+        train_idx = []
+        test_idx = []
 
-        print("Loaded fold %d" % (k))
+        for i in train_idx_f:
+            train_idx.extend( (i * slices_per_track) + np.arange(slices_per_track) )
+
+        for i in test_idx_f:
+            test_idx.extend( (i * slices_per_track) + np.arange(slices_per_track))
+
+        train_data = load_dataset(slices_names[train_idx])
+        test_data = load_dataset(slices_names[test_idx])
 
         k+=1 
+
+        print("Loaded fold %d" % (k))
 
         for epoch in range(num_epochs):
 
@@ -328,7 +406,7 @@ def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_
             train_err = 0
             train_batches = 0
 
-            for batch_data, batch_labels in iterate_minibatches(train_data, labels[train_idx], batchsize=batch_size, shuffle=True):
+            for batch_data, batch_labels in iterate_minibatches(train_data, slices_labels[train_idx], batchsize=batch_size, shuffle=True):
                 train_err += train_fn(batch_data, batch_labels)
                 train_batches+=1
 
@@ -336,7 +414,7 @@ def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_
             val_acc = 0
             val_batches = 0
 
-            for batch_data, batch_labels in iterate_minibatches(test_data, labels[test_idx], batchsize=batch_size, shuffle=True):
+            for batch_data, batch_labels in iterate_minibatches(test_data, slices_labels[test_idx], batchsize=batch_size, shuffle=True):
                 err, acc = val_fn(batch_data, batch_labels)
                 val_err+=err
                 val_acc+=acc
@@ -349,17 +427,30 @@ def main(model='mlp', num_epochs=80, meta_file="meta_jgtzan100_z120.txt", batch_
             print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
             print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
 
+        y_true = []
+        y_predicted = []
+        
+        for i in test_idx_f:
+            x = test_data[ (i * slices_per_track) + np.arange(slices_per_track) ]
+            y = test_fn(x)
+            s = y.sum(axis=1)
+            prediction = s.argmax()
+            y_predicted.append(prediction)
+            y_true.append(full_labels[i])
+
+        print("Results for FOLD %d:" % (k))
+        print(classification_report(y_true, y_predicted, get_class_names()))
+        print("Confusion Matrix")
+        print_cm(confusion_matrix(y_true, y_predicted), get_class_names())
+        
+        #print ("FINAL TEST SET STATS FOR FOLD %d:" % (k))
+        #print ("validation loss:\t\t{:.6f}".format(val_err / val_batches))
+        #print ("validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
+
         train_data = None
         test_data = None
-
-        train_fn = None
-        test_fn = None
-
-        train_fn, test_fn = get_fns(network, input_var, target_var)
-
-        print ("FINAL TEST SET STATS FOR FOLD %d:" % (k))
-        print ("validation loss:\t\t{:.6f}".format(val_err / val_batches))
-        print ("validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
+        
+        reset_weights(network)
 
     # # Finally, launch the training loop.
     # print("Starting training...")
