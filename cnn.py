@@ -425,6 +425,7 @@ def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z12
                 print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
                 print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
                 print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
+                sys.stdout.flush() 
 
         y_true = []
         y_predicted = []
