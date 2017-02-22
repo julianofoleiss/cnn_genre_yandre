@@ -180,7 +180,7 @@ def build_custom_mlp(input_var=None, depth=2, width=800, drop_input=.2,
     return network
 
 
-def build_cnn(input_var=None):
+def build_cnn(input_var=None, fcc_neurons=512, dropout=0.5, fcc_layers=1):
     # As a third model, we'll create a CNN of two convolution + pooling stages
     # and a fully-connected hidden layer in front of the output layer.
 
@@ -215,11 +215,12 @@ def build_cnn(input_var=None):
     #         num_units=dense_layer_neurons,
     #         nonlinearity=lasagne.nonlinearities.rectify)
 
-    network = lasagne.layers.DenseLayer(
-        lasagne.layers.dropout(network, p=.5),
-        num_units=512,
-        nonlinearity=lasagne.nonlinearities.rectify # maybe softmax?
-    )
+    for i in xrange(fcc_layers):
+        network = lasagne.layers.DenseLayer(
+            lasagne.layers.dropout(network, p=dropout),
+            num_units=fcc_neurons,
+            nonlinearity=lasagne.nonlinearities.rectify # maybe softmax?
+        )
 
     # And, finally, the 10-unit output layer with 50% dropout on its inputs:
     # network = lasagne.layers.DenseLayer(
@@ -228,7 +229,7 @@ def build_cnn(input_var=None):
     #         nonlinearity=lasagne.nonlinearities.softmax)
 
     network = lasagne.layers.DenseLayer(
-	lasagne.layers.dropout(network, p=.5),
+	lasagne.layers.dropout(network, p=dropout),
         num_units=10,
         nonlinearity=lasagne.nonlinearities.softmax
     )
@@ -266,10 +267,10 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
-def get_fns(input_var, target_var):
+def get_fns(input_var, target_var, fcc_neurons, dropout, fcc_layers):
     print("Building model and compiling functions...")
 
-    network = build_cnn(input_var)
+    network = build_cnn(input_var, fcc_neurons, dropout, fcc_layers)
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize (for our multi-class problem, it is the cross-entropy loss):
@@ -355,9 +356,28 @@ def load_meta(meta_file):
 def get_class_names():
     return ['blues', 'classical', 'country', 'disco', 'hiphop', 'jazz', 'metal', 'pop', 'reggae', 'rock']
 
-def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z120.txt", 
-    meta_full_file="meta_jgtzan100_z120.txt", batch_size=500, slices_per_track=50):
+def tt(num_epochs=80, 
+    meta_slices_train="setme_ms_train", 
+    meta_full_train="setme_mf_train",
+    meta_slices_test="setme_ms_test", 
+    meta_full_test="setme_mf_test", 
+    batch_size=500, 
+    slices_per_track=50,
+    fcc_neurons=512, 
+    dropout=0.5,
+    fcc_layers=1):
 
+    print("Experiment parameters:")
+    print("\tnum_epochs: %d" % (num_epochs))
+    print("\tbatch size: %d" % (batch_size))
+    print("\tslices_per_track: %d" % (slices_per_track))
+    print("\tfcc_neurons: %d" % (fcc_neurons))
+    print("\tdropout: %0.2f" % (dropout))
+    print("\tfcc_layers: %0.2f" % fcc_layers))
+    print("\tmeta_slices_train: %s" % (meta_slices_train))
+    print("\tmeta_full_train: %s" % (meta_full_train))
+    print("\tmeta_slices_test: %s" % (meta_slices_test))
+    print("\tmeta_full_test: %s" % (meta_full_test))
 
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
@@ -365,7 +385,104 @@ def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z12
 
     # Create neural network model (depending on first command line parameter)
     
-    train_fn, val_fn, test_fn, network = get_fns(input_var, target_var)
+    train_fn, val_fn, test_fn, network = get_fns(input_var, target_var, fcc_neurons, dropout, fcc_layers)
+
+    #load meta_file(s)
+
+    slices_names_train, slices_labels_train = load_meta(meta_slices_train)
+    full_names_train, full_labels_train = load_meta(meta_full_train)
+
+    slices_names_test, slices_labels_test = load_meta(meta_slices_test)
+    full_names_test, full_labels_test = load_meta(meta_full_test)
+
+    print("Loading training data")
+
+    train_data = load_dataset(slices_names_train)
+
+    print("...done!")
+
+    for epoch in xrange(num_epochs):
+        start_time = time.time()
+        train_err = 0
+        train_batches = 0
+
+        for batch_data, batch_labels in iterate_minibatches(train_data, slices_labels_train, batchsize=batch_size, shuffle=True):
+            train_err += train_fn(batch_data, batch_labels)
+            train_batches+=1
+
+        #TODO: implement validation-set checking
+        # val_err = 0
+        # val_acc = 0
+        # val_batches = 0
+
+        # for batch_data, batch_labels in iterate_minibatches(test_data, slices_labels[test_idx], batchsize=batch_size, shuffle=True):
+        #     err, acc = val_fn(batch_data, batch_labels)
+        #     val_err+=err
+        #     val_acc+=acc
+        #     val_batches+=1
+
+        if(epoch % 10 == 0 or epoch == (num_epochs - 1)):
+            # Then we print the results for this epoch:
+            print("Epoch {} of {} took {:.3f}s".format(
+                epoch + 1, num_epochs, time.time() - start_time))
+            print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
+            #print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
+            #print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
+            sys.stdout.flush()
+
+    y_true = []
+    y_predicted = []
+    
+
+    print("Training done!")
+    print("Loading test data")
+
+    test_data = load_dataset(slices_names_test)
+
+    print("...done!")
+
+    #print(test_idx_f)
+    for i in xrange(len(full_names_test)):
+        #print("sample %d" % (i))
+        x = test_data[ (i * slices_per_track) + np.arange(slices_per_track) ]
+        y = test_fn(x)
+        y = np.array(y)[0]
+        s = y.sum(axis=0)
+        #print(s, s.shape)
+        prediction = s.argmax()
+        y_predicted.append(prediction)
+        y_true.append(full_labels_test[i])
+        #print("true: %d, predicted: %d" % (y_true[-1], y_predicted[-1]))
+
+    print("TEST Results:")
+    print("Accuracy: %.2f" % (accuracy_score(y_true, y_predicted)) )
+    print(classification_report(y_true, y_predicted, target_names=get_class_names()))
+    print("Confusion Matrix")
+    print_cm(confusion_matrix(y_true, y_predicted), get_class_names())
+
+    sys.stdout.flush()
+
+def cv(num_epochs=80, meta_slices_file="setme_slices", 
+    meta_full_file="setme_full", batch_size=500, slices_per_track=50,
+    fcc_neurons=512, dropout=0.5, fcc_layers=1):
+
+    print("Experiment parameters:")
+    print("\tnum_epochs: %d" % (num_epochs))
+    print("\tbatch size: %d" % (batch_size))
+    print("\tslices_per_track: %d" % (slices_per_track))
+    print("\tfcc_neurons: %d" % (fcc_neurons))
+    print("\tdropout: %0.2f" % (dropout))
+    print("\tfcc_layers: %0.2f" % (fcc_layers))
+    print("\tmeta_slices_file: %s" % (meta_slices_file))
+    print("\tmeta_full_file: %s" % (meta_full_file))
+    
+    # Prepare Theano variables for inputs and targets
+    input_var = T.tensor4('inputs')
+    target_var = T.ivector('targets')
+
+    # Create neural network model (depending on first command line parameter)
+    
+    train_fn, val_fn, test_fn, network = get_fns(input_var, target_var, fcc_neurons, dropout)
 
     #load meta_file(s)
 
@@ -451,89 +568,101 @@ def main(model='mlp', num_epochs=80, meta_slices_file="meta_jgtzan100_slices_z12
         print("Confusion Matrix")
         print_cm(confusion_matrix(y_true, y_predicted), get_class_names())
 
-	sys.stdout.flush()        
-
-        #print ("FINAL TEST SET STATS FOR FOLD %d:" % (k))
-        #print ("validation loss:\t\t{:.6f}".format(val_err / val_batches))
-        #print ("validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
+        sys.stdout.flush()        
 
         train_data = None
         test_data = None
         
         reset_weights(network)
 
-    # # Finally, launch the training loop.
-    # print("Starting training...")
-    # # We iterate over epochs:
-    # for epoch in range(num_epochs):
-    #     # In each epoch, we do a full pass over the training data:
-    #     train_err = 0
-    #     train_batches = 0
-    #     start_time = time.time()
-    #     for batch in iterate_minibatches(X_train, y_train, 500, shuffle=True):
-    #         inputs, targets = batch
-    #         train_err += train_fn(inputs, targets)
-    #         train_batches += 1
+def print_usage():
+    print("\n\nTrains a neural network on JGTZAN100 using Lasagne.")
+    print("Usage: %s EVAL [PARAMS]" % sys.argv[0])
+    print("EVAL: Evaluation method")
+    print("\t'cv' for cross-validation")
+    print("\t'tt' for train-test")
+    print("\nEvaluation-specific parameters:\n")
 
-    #     # And a full pass over the validation data:
-    #     val_err = 0
-    #     val_acc = 0
-    #     val_batches = 0
-    #     for batch in iterate_minibatches(X_val, y_val, 500, shuffle=False):
-    #         inputs, targets = batch
-    #         err, acc = val_fn(inputs, targets)
-    #         val_err += err
-    #         val_acc += acc
-    #         val_batches += 1
-
-    #     # Then we print the results for this epoch:
-    #     print("Epoch {} of {} took {:.3f}s".format(
-    #         epoch + 1, num_epochs, time.time() - start_time))
-    #     print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
-    #     print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
-    #     print("  validation accuracy:\t\t{:.2f} %".format(
-    #         val_acc / val_batches * 100))
-
-    # # After training, we compute and print the test error:
-    # test_err = 0
-    # test_acc = 0
-    # test_batches = 0
-    # for batch in iterate_minibatches(X_test, y_test, 500, shuffle=False):
-    #     inputs, targets = batch
-    #     err, acc = val_fn(inputs, targets)
-    #     test_err += err
-    #     test_acc += acc
-    #     test_batches += 1
-    # print("Final results:")
-    # print("  test loss:\t\t\t{:.6f}".format(test_err / test_batches))
-    # print("  test accuracy:\t\t{:.2f} %".format(
-    #     test_acc / test_batches * 100))
-
-    # Optionally, you could now dump the network weights to a file like this:
-    # np.savez('model.npz', *lasagne.layers.get_all_param_values(network))
-    #
-    # And load them again later on like this:
-    # with np.load('model.npz') as f:
-    #     param_values = [f['arr_%d' % i] for i in range(len(f.files))]
-    # lasagne.layers.set_all_param_values(network, param_values)
-
+    if sys.argv[1] == 'cv':
+        print("Usage: %s cv [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [FCCLAYERS [META_SLICES [META_FULL]]]]]]]]]" % sys.argv[0])
+        print("EPOCHS: number of training epochs to perform (default: 500)")
+        print("BATCHSIZE: number of samples for each minibatch iteration")
+        print("SLICESPERTRACK: number of slices per track. Currently all tracks must be split into an equal number of slices")
+        print("FCCNEURONS: Number of neurons in the fully connected layers")
+        print("DROPOUT: Probability of input dropout to each fully connected layer")
+        print("FCCLAYERS: Number of fully connected layers prior to the final softmax layer")
+        print("META_SLICES: metadata filename that contains fullpath and labels for all spectrogram slices")
+        print("META_FULL: metadata filename that contains fullpath and labels to full spectrograms. Must be in the same order as META_SLICES.")        
+    else:
+        if sys.argv[1] == 'tt':
+            print("Usage: %s tt [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [ FCCLAYERS [META_SLICES_TRAIN [META_FULL_TRAIN [META_SLICES_TEST [META_FULL_TEST]]]]]]]]]]" % sys.argv[0])
+            print("EPOCHS: number of training epochs to perform (default: 500)")
+            print("BATCHSIZE: number of samples for each minibatch iteration")
+            print("SLICESPERTRACK: number of slices per track. Currently all tracks must be split into an equal number of slices")
+            print("FCCNEURONS: Number of neurons in the fully connected layers")
+            print("DROPOUT: Probability of input dropout to each fully connected layer")
+            print("FCCLAYERS: Number of fully connected layers prior to the final softmax layer")
+            print("META_SLICES_TRAIN: metadata filename that contains fullpath and labels for all spectrogram slices (TRAINING DATA)")
+            print("META_FULL_TRAIN: metadata filename that contains fullpath and labels to full spectrograms. Must be in the same order as META_SLICES. (TEST DATA)")
+            print("META_SLICES_TEST: metadata filename that contains fullpath and labels for all spectrogram slices (TRAINING DATA)")
+            print("META_FULL_TEST: metadata filename that contains fullpath and labels to full spectrograms. Must be in the same order as META_SLICES. (TEST DATA)")
+        else:
+            print("Use %s cv --help OR %s tt for evaluation-method parameters" % (sys.argv[0], sys.argv[0]))
 
 if __name__ == '__main__':
     if ('--help' in sys.argv) or ('-h' in sys.argv):
-        print("Trains a neural network on JGTZAN100 using Lasagne.")
-        print("Usage: %s [MODEL [EPOCHS]]" % sys.argv[0])
-        print()
-        print("MODELS:")
-        #print("       'mlp' for a simple Multi-Layer Perceptron (MLP),")
-        #print("       'custom_mlp:DEPTH,WIDTH,DROP_IN,DROP_HID' for an MLP")
-        #print("       with DEPTH hidden layers of WIDTH units, DROP_IN")
-        #print("       input dropout and DROP_HID hidden dropout,")
-        print("       'cnn' for a simple Convolutional Neural Network (CNN).")
-        print("EPOCHS: number of training epochs to perform (default: 500)")
+        print_usage()
     else:
-        kwargs = {}
-        if len(sys.argv) > 1:
-            kwargs['model'] = sys.argv[1]
-        if len(sys.argv) > 2:
-            kwargs['num_epochs'] = int(sys.argv[2])
-        main(**kwargs)
+        if len(sys.argv) < 2:
+            sys.argv.append('')
+
+        if sys.argv[1] == 'cv':
+            kwargs = {}
+            if len(sys.argv) > 2:
+                kwargs['num_epochs'] = int(sys.argv[2])
+            if len(sys.argv) > 3:
+                kwargs['batch_size'] = int(sys.argv[3])
+            if len(sys.argv) > 4:
+                kwargs['slices_per_track'] = int(sys.argv[4])
+            if len(sys.argv) > 5:
+                kwargs['fcc_neurons'] = int(sys.argv[5])
+            if len(sys.argv) > 6:
+                kwargs['dropout'] = float(sys.argv[6])
+            if len(sys.argv) > 7:
+                kwargs['fcc_layers'] = int(sys.argv[7])                
+            if len(sys.argv) > 8:
+                kwargs['meta_slices_file'] = (sys.argv[8])
+            if len(sys.argv) > 9:
+                kwargs['meta_full_file'] = (sys.argv[9])
+
+            cv(**kwargs)
+        else:
+            if sys.argv[1] == 'tt':
+                kwargs = {}
+                if len(sys.argv) > 2:
+                    kwargs['num_epochs'] = int(sys.argv[2])
+                if len(sys.argv) > 3:
+                    kwargs['batch_size'] = int(sys.argv[3])
+                if len(sys.argv) > 4:
+                    kwargs['slices_per_track'] = int(sys.argv[4])
+                if len(sys.argv) > 5:
+                    kwargs['fcc_neurons'] = int(sys.argv[5])
+                if len(sys.argv) > 6:
+                    kwargs['dropout'] = float(sys.argv[6])
+                if len(sys.argv) > 7:
+                    kwargs['fcc_layers'] = int(sys.argv[7]) 
+                if len(sys.argv) > 8:
+                    kwargs['meta_slices_train'] = (sys.argv[8])
+                if len(sys.argv) > 9:
+                    kwargs['meta_full_train'] = (sys.argv[9])      
+                if len(sys.argv) > 10:
+                    kwargs['meta_slices_test'] = (sys.argv[10])
+                if len(sys.argv) > 11:
+                    kwargs['meta_full_test'] = (sys.argv[11])       
+
+                tt(**kwargs)          
+
+            else:
+                print_usage()
+
+    print("")
