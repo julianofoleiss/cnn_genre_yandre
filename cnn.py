@@ -28,7 +28,7 @@ import time
 
 import subprocess
 
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
 def print_cm(cm, labels, hide_labels=True, file=None, hide_zeroes=False, hide_diagonal=False, hide_threshold=None):
@@ -105,7 +105,7 @@ def load_dataset(file_list):
     return np.asarray(out)
 
 
-def build_cnn(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
+def build_cnn3x3(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
     # As a third model, we'll create a CNN of two convolution + pooling stages
     # and a fully-connected hidden layer in front of the output layer.
 
@@ -135,12 +135,6 @@ def build_cnn(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
             W=lasagne.init.GlorotUniform())
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2,2), stride=2)
 
-    # A fully-connected layer of 256 units with 50% dropout on its inputs:
-    # network = lasagne.layers.DenseLayer(
-    #         lasagne.layers.dropout(network, p=.5),
-    #         num_units=dense_layer_neurons,
-    #         nonlinearity=lasagne.nonlinearities.rectify)
-
     for i in xrange(fcc_layers):
         network = lasagne.layers.DenseLayer(
             lasagne.layers.dropout(network, p=dropout),
@@ -148,11 +142,50 @@ def build_cnn(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
             nonlinearity=lasagne.nonlinearities.rectify # maybe softmax?
         )
 
-    # And, finally, the 10-unit output layer with 50% dropout on its inputs:
-    # network = lasagne.layers.DenseLayer(
-    #         lasagne.layers.dropout(network, p=.5),
-    #         num_units=out_units,
-    #         nonlinearity=lasagne.nonlinearities.softmax)
+    network = lasagne.layers.DenseLayer(
+	lasagne.layers.dropout(network, p=dropout),
+        num_units=10,
+        nonlinearity=lasagne.nonlinearities.softmax
+    )
+
+    return network
+
+def build_cnn5x5(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
+    # As a third model, we'll create a CNN of two convolution + pooling stages
+    # and a fully-connected hidden layer in front of the output layer.
+
+    # Input layer, as usual:
+    network = lasagne.layers.InputLayer(shape=(None, 1, 256, 16),
+                                        input_var=input_var)
+    # This time we do not apply input dropout, as it tends to work less well
+    # for convolutional layers.
+
+    # Convolutional layer with 64 kernels of size 5x5, stride of 1. Strided and padded
+    # convolutions are supported as well; see the docstring.
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=64, filter_size=(5,5), stride=1,
+            nonlinearity=lasagne.nonlinearities.rectify,
+            W=lasagne.init.GlorotUniform())
+    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2,2), stride=2)
+
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=64, filter_size=(5,5), stride=1, pad='same',
+            nonlinearity=lasagne.nonlinearities.rectify,
+            W=lasagne.init.GlorotUniform())
+    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2,2), stride=2)
+
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=64, filter_size=(5,5), stride=1, pad='same',
+            nonlinearity=lasagne.nonlinearities.rectify,
+            W=lasagne.init.GlorotUniform())
+    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2,2), stride=2)
+
+    for i in xrange(fcc_layers):
+        network = lasagne.layers.DenseLayer(
+            lasagne.layers.dropout(network, p=dropout),
+            num_units=fcc_neurons,
+            nonlinearity=lasagne.nonlinearities.rectify # maybe softmax?
+        )
 
     network = lasagne.layers.DenseLayer(
 	lasagne.layers.dropout(network, p=dropout),
@@ -193,10 +226,16 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
-def get_fns(input_var, target_var, fcc_neurons, dropout, fcc_layers):
+def get_fns(input_var, target_var, fcc_neurons, dropout, fcc_layers, filter_size):
     print("Building model and compiling functions...")
 
-    network = build_cnn(input_var, fcc_neurons, dropout, fcc_layers)
+    if filter_size == 3
+        network = build_cnn3x3(input_var, fcc_neurons, dropout, fcc_layers)
+    else if filter_size == 5:
+        network = build_cnn5x5(input_var, fcc_neurons, dropout, fcc_layers)
+    else:
+        print("ERROR! Invalid filter size!")
+        exit(1)
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize (for our multi-class problem, it is the cross-entropy loss):
@@ -245,6 +284,12 @@ def reset_weights(network):
         else:
             v.set_value(lasagne.init.GlorotUniform()(val.shape))
 
+def get_params(network):
+    return lasagne.layers.get_all_param_values(network, trainable=True)
+
+def set_params(network, params):
+    lasagne.layers.set_all_param_values(network, params)
+
 def load_meta(meta_file):
     with open(meta_file, 'r') as f:
         content = f.readlines()
@@ -291,7 +336,9 @@ def tt(num_epochs=80,
     slices_per_track=50,
     fcc_neurons=500, 
     dropout=0.5,
-    fcc_layers=1):
+    fcc_layers=1,
+    filter_size=3,
+    early_stopping=0):
 
     print("Experiment parameters:")
     print("\tnum_epochs: %d" % (num_epochs))
@@ -300,10 +347,15 @@ def tt(num_epochs=80,
     print("\tfcc_neurons: %d" % (fcc_neurons))
     print("\tdropout: %0.2f" % (dropout))
     print("\tfcc_layers: %d" % (fcc_layers))
+    print("\tfilter_size: %d" % (filter_size))
+    print("\tearly_stopping: %d" % (early_stopping))
     print("\tmeta_slices_train: %s" % (meta_slices_train))
     print("\tmeta_full_train: %s" % (meta_full_train))
     print("\tmeta_slices_test: %s" % (meta_slices_test))
     print("\tmeta_full_test: %s" % (meta_full_test))
+
+    print("FIX VALIDATION SET LOGIC!")
+    exit(1)
 
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
@@ -335,17 +387,6 @@ def tt(num_epochs=80,
         for batch_data, batch_labels in iterate_minibatches(train_data, slices_labels_train, batchsize=batch_size, shuffle=True):
             train_err += train_fn(batch_data, batch_labels)
             train_batches+=1
-
-        #TODO: implement validation-set checking
-        # val_err = 0
-        # val_acc = 0
-        # val_batches = 0
-
-        # for batch_data, batch_labels in iterate_minibatches(test_data, slices_labels[test_idx], batchsize=batch_size, shuffle=True):
-        #     err, acc = val_fn(batch_data, batch_labels)
-        #     val_err+=err
-        #     val_acc+=acc
-        #     val_batches+=1
 
         if(epoch % 10 == 0 or epoch == (num_epochs - 1)):
             # Then we print the results for this epoch:
@@ -390,7 +431,7 @@ def tt(num_epochs=80,
 
 def cv(num_epochs=80, meta_slices_file="setme_slices", 
     meta_full_file="setme_full", batch_size=500, slices_per_track=50,
-    fcc_neurons=512, dropout=0.5, fcc_layers=1):
+    fcc_neurons=512, dropout=0.5, fcc_layers=1, filter_size=3, early_stopping=0):
 
     print("Experiment parameters:")
     print("\tnum_epochs: %d" % (num_epochs))
@@ -399,16 +440,16 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
     print("\tfcc_neurons: %d" % (fcc_neurons))
     print("\tdropout: %0.2f" % (dropout))
     print("\tfcc_layers: %d" % (fcc_layers))
+    print("\tfilter_size: %d" % (filter_size))
+    print("\tearly_stopping: %d" % (early_stopping))
     print("\tmeta_slices_file: %s" % (meta_slices_file))
     print("\tmeta_full_file: %s" % (meta_full_file))
     
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
     target_var = T.ivector('targets')
-
-    # Create neural network model (depending on first command line parameter)
     
-    train_fn, val_fn, test_fn, network = get_fns(input_var, target_var, fcc_neurons, dropout, fcc_layers)
+    train_fn, val_fn, test_fn, network = get_fns(input_var, target_var, fcc_neurons, dropout, fcc_layers, filter_size)
 
     #load meta_file(s)
 
@@ -418,26 +459,37 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
     skf = StratifiedKFold(n_splits=10)
 
     #print(labels)
+    estop = True if early_stopping > 0 else False
 
     k = 0
 
     for train_idx_f, test_idx_f in skf.split(full_names, full_labels):
 
         train_idx = []
+        val_idx = []
         test_idx = []
 
-        for i in train_idx_f:
+        train_idx_x, val_idx_x, train_idx_y, val_idx_y = train_test_split(train_idx_f, full_labels[train_idx_f])
+
+        for i in train_idx_x:
             train_idx.extend( (i * slices_per_track) + np.arange(slices_per_track) )
+
+        for i in val_idx_x:
+            val_idx.extend( (i * slices_per_track) + np.range(slices_per_track))
 
         for i in test_idx_f:
             test_idx.extend( (i * slices_per_track) + np.arange(slices_per_track))
 
         k+=1 
 
-	print("Loading fold %d" % (k))
+        prev_val_loss = float("inf")
+        n_val_loss = 0
+        best_param = None
+
+        print("Loading fold %d" % (k))
         train_data = load_dataset(slices_names[train_idx])
         test_data = load_dataset(slices_names[test_idx])
-
+        val_data = load_dataset(slices_names[val_idx])
 
         print("...done!")
         
@@ -455,13 +507,29 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
             val_acc = 0
             val_batches = 0
 
-            for batch_data, batch_labels in iterate_minibatches(test_data, slices_labels[test_idx], batchsize=batch_size, shuffle=True):
+            for batch_data, batch_labels in iterate_minibatches(val_data, slices_labels[val_idx], batchsize=batch_size, shuffle=True):
                 err, acc = val_fn(batch_data, batch_labels)
                 val_err+=err
                 val_acc+=acc
                 val_batches+=1
 
-            if(epoch % 10 == 0 or epoch == (num_epochs - 1)):
+            end_training = False
+
+            if estop:
+                if (val_err / val_batches) < prev_val_loss:
+                    prev_val_loss = (val_err / val_batches)
+                    best_param = get_params(network)
+                    n_val_loss = 0
+                else:
+                    if n_val_loss < early_stopping:
+                        n_val_loss+=1
+                    else:
+                        end_training = True
+                        set_params(network, best_param)
+            else:
+                prev_val_loss = (val_err / val_batches)
+
+            if(epoch % 10 == 0 or epoch == (num_epochs - 1) or end_training = True):
                 # Then we print the results for this epoch:
                 print("Epoch {} of {} took {:.3f}s".format(
                     epoch + 1, num_epochs, time.time() - start_time))
@@ -469,6 +537,13 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
                 print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
                 print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
                 sys.stdout.flush()
+
+            if end_training:
+                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f, this epoch: %f" % (epoch +1, prev_val_loss, val_err / val_batches))
+                break
+
+        if not end_training:
+            print("EXECUTED EVERY EPOCH! Final validation error: %f" % (prev_val_loss))
 
         y_true = []
         y_predicted = []
@@ -498,6 +573,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
 
         train_data = None
         test_data = None
+        val_data = None
         
         reset_weights(network)
 
@@ -510,24 +586,28 @@ def print_usage():
     print("\nEvaluation-specific parameters:\n")
 
     if sys.argv[1] == 'cv':
-        print("Usage: %s cv [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [FCCLAYERS [META_SLICES [META_FULL]]]]]]]]]" % sys.argv[0])
+        print("Usage: %s cv [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [FCCLAYERS [FILTER_SIZE [EARLY_STOPPING [META_SLICES [META_FULL]]]]]]]]]]]" % sys.argv[0])
         print("EPOCHS: number of training epochs to perform (default: 80)")
         print("BATCHSIZE: number of samples for each minibatch iteration")
         print("SLICESPERTRACK: number of slices per track. Currently all tracks must be split into an equal number of slices")
         print("FCCNEURONS: Number of neurons in the fully connected layers")
         print("DROPOUT: Probability of input dropout to each fully connected layer")
         print("FCCLAYERS: Number of fully connected layers prior to the final softmax layer")
+        print("FILTER_SIZE: Size of learnable convolutional filters (FILTER_SIZExFILTER_SIZE) ")
+        print("EARLY_STOPPING: Number of stalled epochs to wait before early stopping. 0 indicates NO EARLY STOPPING.")
         print("META_SLICES: metadata filename that contains fullpath and labels for all spectrogram slices")
         print("META_FULL: metadata filename that contains fullpath and labels to full spectrograms. Must be in the same order as META_SLICES.")        
     else:
         if sys.argv[1] == 'tt':
-            print("Usage: %s tt [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [ FCCLAYERS [META_SLICES_TRAIN [META_FULL_TRAIN [META_SLICES_TEST [META_FULL_TEST]]]]]]]]]]" % sys.argv[0])
+            print("Usage: %s tt [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [FCCLAYERS [FILTER_SIZE [META_SLICES_TRAIN [META_FULL_TRAIN [META_SLICES_TEST [META_FULL_TEST]]]]]]]]]]]" % sys.argv[0])
             print("EPOCHS: number of training epochs to perform (default: 80)")
             print("BATCHSIZE: number of samples for each minibatch iteration")
             print("SLICESPERTRACK: number of slices per track. Currently all tracks must be split into an equal number of slices")
             print("FCCNEURONS: Number of neurons in the fully connected layers")
             print("DROPOUT: Probability of input dropout to each fully connected layer")
             print("FCCLAYERS: Number of fully connected layers prior to the final softmax layer")
+            print("FILTER_SIZE: Size of learnable convolutional filters (FILTER_SIZExFILTER_SIZE) ")
+            print("EARLY_STOPPING: Number of stalled epochs to wait before early stopping. 0 indicates NO EARLY STOPPING.")
             print("META_SLICES_TRAIN: metadata filename that contains fullpath and labels for all spectrogram slices (TRAINING DATA)")
             print("META_FULL_TRAIN: metadata filename that contains fullpath and labels to full spectrograms. Must be in the same order as META_SLICES. (TEST DATA)")
             print("META_SLICES_TEST: metadata filename that contains fullpath and labels for all spectrogram slices (TRAINING DATA)")
@@ -555,11 +635,15 @@ if __name__ == '__main__':
             if len(sys.argv) > 6:
                 kwargs['dropout'] = float(sys.argv[6])
             if len(sys.argv) > 7:
-                kwargs['fcc_layers'] = int(sys.argv[7])                
+                kwargs['fcc_layers'] = int(sys.argv[7])           
             if len(sys.argv) > 8:
-                kwargs['meta_slices_file'] = (sys.argv[8])
+                kwargs['filter_size'] = int(sys.argv[8])      
             if len(sys.argv) > 9:
-                kwargs['meta_full_file'] = (sys.argv[9])
+                kwargs['early_stopping'] = int(sys.argv[9])    
+            if len(sys.argv) > 10:
+                kwargs['meta_slices_file'] = (sys.argv[10])
+            if len(sys.argv) > 11:
+                kwargs['meta_full_file'] = (sys.argv[11])
 
             cv(**kwargs)
         else:
@@ -578,13 +662,17 @@ if __name__ == '__main__':
                 if len(sys.argv) > 7:
                     kwargs['fcc_layers'] = int(sys.argv[7]) 
                 if len(sys.argv) > 8:
-                    kwargs['meta_slices_train'] = (sys.argv[8])
+                    kwargs['filter_size'] = int(sys.argv[8]) 
                 if len(sys.argv) > 9:
-                    kwargs['meta_full_train'] = (sys.argv[9])      
+                    kwargs['early_stopping'] = int(sys.argv[9])    
                 if len(sys.argv) > 10:
-                    kwargs['meta_slices_test'] = (sys.argv[10])
+                    kwargs['meta_slices_train'] = (sys.argv[10])
                 if len(sys.argv) > 11:
-                    kwargs['meta_full_test'] = (sys.argv[11])       
+                    kwargs['meta_full_train'] = (sys.argv[11])      
+                if len(sys.argv) > 12:
+                    kwargs['meta_slices_test'] = (sys.argv[12])
+                if len(sys.argv) > 13:
+                    kwargs['meta_full_test'] = (sys.argv[13])       
 
                 tt(**kwargs)          
 
