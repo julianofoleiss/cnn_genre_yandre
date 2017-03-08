@@ -229,13 +229,14 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 def get_fns(input_var, target_var, fcc_neurons, dropout, fcc_layers, filter_size):
     print("Building model and compiling functions...")
 
-    if filter_size == 3
+    if filter_size == 3:
         network = build_cnn3x3(input_var, fcc_neurons, dropout, fcc_layers)
-    else if filter_size == 5:
-        network = build_cnn5x5(input_var, fcc_neurons, dropout, fcc_layers)
     else:
-        print("ERROR! Invalid filter size!")
-        exit(1)
+        if filter_size == 5:
+            network = build_cnn5x5(input_var, fcc_neurons, dropout, fcc_layers)
+        else:
+            print("ERROR! Invalid filter size!")
+            exit(1)
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize (for our multi-class problem, it is the cross-entropy loss):
@@ -469,13 +470,13 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
         val_idx = []
         test_idx = []
 
-        train_idx_x, val_idx_x, train_idx_y, val_idx_y = train_test_split(train_idx_f, full_labels[train_idx_f])
+        train_idx_x, val_idx_x, train_idx_y, val_idx_y = train_test_split(train_idx_f, full_labels[train_idx_f], test_size=0.2)
 
         for i in train_idx_x:
             train_idx.extend( (i * slices_per_track) + np.arange(slices_per_track) )
 
         for i in val_idx_x:
-            val_idx.extend( (i * slices_per_track) + np.range(slices_per_track))
+            val_idx.extend( (i * slices_per_track) + np.arange(slices_per_track))
 
         for i in test_idx_f:
             test_idx.extend( (i * slices_per_track) + np.arange(slices_per_track))
@@ -529,7 +530,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
             else:
                 prev_val_loss = (val_err / val_batches)
 
-            if(epoch % 10 == 0 or epoch == (num_epochs - 1) or end_training = True):
+            if(epoch % 10 == 0 or epoch == (num_epochs - 1) or end_training == True):
                 # Then we print the results for this epoch:
                 print("Epoch {} of {} took {:.3f}s".format(
                     epoch + 1, num_epochs, time.time() - start_time))
