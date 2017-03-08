@@ -118,19 +118,19 @@ def build_cnn(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
     # Convolutional layer with 64 kernels of size 5x5, stride of 1. Strided and padded
     # convolutions are supported as well; see the docstring.
     network = lasagne.layers.Conv2DLayer(
-            network, num_filters=64, filter_size=(3,3), stride=1,
+            network, num_filters=64, filter_size=(5,5), stride=1,
             nonlinearity=lasagne.nonlinearities.rectify,
             W=lasagne.init.GlorotUniform())
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2,2), stride=2)
 
     network = lasagne.layers.Conv2DLayer(
-            network, num_filters=64, filter_size=(3,3), stride=1,
+            network, num_filters=64, filter_size=(5,5), stride=1, pad='same',
             nonlinearity=lasagne.nonlinearities.rectify,
             W=lasagne.init.GlorotUniform())
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2,2), stride=2)
 
     network = lasagne.layers.Conv2DLayer(
-            network, num_filters=64, filter_size=(3,3), stride=1, pad='same',
+            network, num_filters=64, filter_size=(5,5), stride=1, pad='same',
             nonlinearity=lasagne.nonlinearities.rectify,
             W=lasagne.init.GlorotUniform())
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2,2), stride=2)
