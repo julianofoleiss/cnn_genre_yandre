@@ -355,16 +355,13 @@ def tt(num_epochs=80,
     print("\tmeta_slices_test: %s" % (meta_slices_test))
     print("\tmeta_full_test: %s" % (meta_full_test))
 
-    print("FIX VALIDATION SET LOGIC!")
-    exit(1)
-
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
     target_var = T.ivector('targets')
 
     # Create neural network model (depending on first command line parameter)
     
-    train_fn, val_fn, test_fn, network = get_fns(input_var, target_var, fcc_neurons, dropout, fcc_layers)
+    train_fn, val_fn, test_fn, network = get_fns(input_var, target_var, fcc_neurons, dropout, fcc_layers, filter_size)
 
     #load meta_file(s)
 
@@ -374,29 +371,85 @@ def tt(num_epochs=80,
     slices_names_test, slices_labels_test = load_meta(meta_slices_test)
     full_names_test, full_labels_test = load_meta(meta_full_test)
 
+    estop = True if early_stopping > 0 else False
+
+    train_idx_f = np.arange(len(full_names_train))
+
+    train_idx_x, val_idx_x, train_idx_y, val_idx_y = train_test_split(train_idx_f, full_labels_train[train_idx_f], test_size=0.2)
+
+    train_idx = []
+    val_idx = []
+
+    for i in train_idx_x:
+        train_idx.extend( (i * slices_per_track) + np.arange(slices_per_track) )
+
+    for i in val_idx_x:
+        val_idx.extend( (i * slices_per_track) + np.arange(slices_per_track) )
+
     print("Loading training data")
 
-    train_data = load_dataset(slices_names_train)
+    train_data = load_dataset(slices_names_train[train_idx])
+    val_data = load_dataset(slices_names_train[val_idx])
 
     print("...done!")
+
+    prev_val_loss = float("inf")
+    n_val_loss = 0
+    best_param = None
+    best_epoch = 1
 
     for epoch in xrange(num_epochs):
         start_time = time.time()
         train_err = 0
         train_batches = 0
 
-        for batch_data, batch_labels in iterate_minibatches(train_data, slices_labels_train, batchsize=batch_size, shuffle=True):
+        for batch_data, batch_labels in iterate_minibatches(train_data, slices_labels_train[train_idx], batchsize=batch_size, shuffle=True):
             train_err += train_fn(batch_data, batch_labels)
             train_batches+=1
 
-        if(epoch % 10 == 0 or epoch == (num_epochs - 1)):
+        val_err = 0
+        val_acc = 0
+        val_batches = 0
+
+        for batch_data, batch_labels in iterate_minibatches(val_data, slices_labels_train[val_idx], batchsize=batch_size, shuffle=True):
+            err, acc = val_fn(batch_data, batch_labels)
+            val_err+=err
+            val_acc+=acc
+            val_batches+=1
+        
+        end_training = False
+
+        if estop:
+            if (val_err / val_batches) < prev_val_loss:
+                best_epoch = epoch+1
+                prev_val_loss = val_err / val_batches
+                best_param = get_params(network)
+                n_val_loss = 0
+            else:
+                if n_val_loss < early_stopping:
+                    n_val_loss+=1
+                else:
+                    end_training = True
+                    set_params(network, best_param)
+        else:
+            prev_val_loss = val_err / val_batches
+
+
+        if(epoch % 10 == 0 or epoch == (num_epochs - 1) or end_training == True):
             # Then we print the results for this epoch:
             print("Epoch {} of {} took {:.3f}s".format(
                 epoch + 1, num_epochs, time.time() - start_time))
             print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
-            #print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
-            #print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
+            print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
+            print("  validation accuracy:\t\t{:.2f} %".format(val_acc / val_batches * 100))
             sys.stdout.flush()
+
+        if end_training:
+                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, val_err / val_batches))
+                break
+
+    if not end_training:
+        print("EXECUTED EVERY EPOCH! Final validation error: %f" % (prev_val_loss))
 
     y_true = []
     y_predicted = []
@@ -486,6 +539,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
         prev_val_loss = float("inf")
         n_val_loss = 0
         best_param = None
+        best_epoch = 1
 
         print("Loading fold %d" % (k))
         train_data = load_dataset(slices_names[train_idx])
@@ -518,6 +572,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
 
             if estop:
                 if (val_err / val_batches) < prev_val_loss:
+                    best_epoch = epoch + 1
                     prev_val_loss = (val_err / val_batches)
                     best_param = get_params(network)
                     n_val_loss = 0
@@ -540,7 +595,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
                 sys.stdout.flush()
 
             if end_training:
-                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f, this epoch: %f" % (epoch +1, prev_val_loss, val_err / val_batches))
+                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, val_err / val_batches))
                 break
 
         if not end_training:
