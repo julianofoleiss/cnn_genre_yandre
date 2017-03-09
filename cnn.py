@@ -578,6 +578,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
 
             this_score = (val_err / val_batches) if early_criterion == 'loss' else (val_acc / val_batches * 100)
 
+
             if estop:
                 if (this_score <= prev_val_loss and early_criterion == 'loss') or (this_score >= prev_val_loss and early_criterion == 'acc'):
                     best_epoch = epoch + 1
