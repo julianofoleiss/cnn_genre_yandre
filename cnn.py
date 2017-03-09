@@ -92,6 +92,7 @@ def load_image(work):
     i = open(work)
     img = Image.open(i)
     #img = img.convert('RGB')
+    #img = img.convert('L')
     out = np.asarray(img, dtype='float32') / 256.0
     out = np.reshape(out, (-1, out.shape[0], out.shape[1]))
     img.close()
@@ -395,7 +396,7 @@ def tt(num_epochs=80,
 
     print("...done!")
 
-    prev_val_loss = float("inf")
+    prev_val_loss = float("inf") if early_criterion == 'loss' else 0.0
     n_val_loss = 0
     best_param = None
     best_epoch = 1
@@ -421,12 +422,12 @@ def tt(num_epochs=80,
         
         end_training = False
 
-        this_loss = (val_err / val_batches) if early_criterion == 'loss' else (val_acc / val_batches * 100)
+        this_score = (val_err / val_batches) if early_criterion == 'loss' else (val_acc / val_batches * 100)
 
         if estop:
-            if this_loss < prev_val_loss:
+            if (this_score =< prev_val_loss and early_criterion == 'loss') or (this_score >= prev_val_loss and early_criterion == 'acc'):
                 best_epoch = epoch+1
-                prev_val_loss = this_loss
+                prev_val_loss = this_score
                 best_param = get_params(network)
                 n_val_loss = 0
             else:
@@ -543,7 +544,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
 
         prev_val_loss = float("inf") if early_criterion == 'loss' else 0.0
         n_val_loss = 0
-        best_param = None
+        best_param = get_params(network)
         best_epoch = 1
 
         print("Loading fold %d" % (k))
