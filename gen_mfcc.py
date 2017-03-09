@@ -31,10 +31,11 @@ def thread_mfcc(work):
     
     mfccs = 20 * np.log( np.power(mfccs, 2) + np.finfo(float).eps)
     mfccs = mfccs.T
-
-    mfccs = mfccs[:,50: 2550 ]
+    mfccs = mfccs[:,0 : (mfccs.shape[1] / 16) * 16 ]
 
     plt.imsave(output_file, mfccs[::-1], cmap=plt.get_cmap('Greys'))
+
+    return mfccs.shape[1]
 
 if __name__ == '__main__':
 
@@ -82,6 +83,9 @@ if __name__ == '__main__':
 
     pool = Pool(4)
 
-    pool.map(thread_mfcc, work)
+    r = pool.map(thread_mfcc, work)
+
+    print("Average resulting width: %d" % np.mean(r))
+
 
 
