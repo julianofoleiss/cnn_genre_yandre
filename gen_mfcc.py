@@ -9,10 +9,10 @@ import glob
 import os
 from multiprocess import Pool
 
-def calc_mfcc(filename, mfcc_coeff):
+def calc_mfcc(filename, mfcc_coeff, fs):
 
     converter = spec.Wav2Spectrogram()
-    s = converter.convert(open(filename), window_length=2048, window_step=1024, spectrum_type='magnitude', save_metadata=True)
+    s = converter.convert(open(filename), window_length=2048, window_step=1024, spectrum_type='magnitude', save_metadata=True, fs=fs)
     mfcc_ex = mfcc.Mfcc()
 
     track = mfcc_ex.calc_track(s, mfcc_coeff)
@@ -23,10 +23,11 @@ def thread_mfcc(work):
     filename = work[0]
     output_file = work[1]
     coeffs = work[2]
+    fs = work[3]
 
     print("Calculating MFCC coefficients for %s" % filename)
 
-    mfccs = calc_mfcc(filename, coeffs)
+    mfccs = calc_mfcc(filename, coeffs, fs)
     
     mfccs = 20 * np.log( np.power(mfccs, 2) + np.finfo(float).eps)
     mfccs = mfccs.T
@@ -37,14 +38,15 @@ def thread_mfcc(work):
 
 if __name__ == '__main__':
 
-    if len(sys.argv) < 5:
-        print ("usage: %s input_dir output_dir audio_extension mfcc_coeffs" % sys.argv[0])
+    if len(sys.argv) < 6:
+        print ("usage: %s input_dir output_dir audio_extension mfcc_coeffs sampling_rate" % sys.argv[0])
         exit(1)
 
     input_dir = sys.argv[1]
     output_dir = sys.argv[2]
     extension = sys.argv[3]
     mfcc_coeffs = int(sys.argv[4])
+    fs = int(sys.argv[5])
     
     if input_dir[-1] != '/':
         input_dir += '/'
@@ -71,8 +73,8 @@ if __name__ == '__main__':
         output_files.append( "%s%s.png" % (output_dir, filename) )
 
     cs = [mfcc_coeffs] * len(audios)
-    
-    work = zip(audios, output_files, cs)
+    fss = [fs] * len(audios)
+    work = zip(audios, output_files, cs, fss)
 
     print work[0]
 
