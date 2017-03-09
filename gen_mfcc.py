@@ -1,0 +1,85 @@
+import mir3.modules.features as feat
+import mir3.modules.tool.wav2spectrogram as spec
+import mir3.modules.features.mfcc as mfcc
+import mir3.modules.features.join as join
+import numpy as np
+import matplotlib.pyplot as plt
+import sys
+import glob
+import os
+from multiprocess import Pool
+
+def calc_mfcc(filename, mfcc_coeff):
+
+    converter = spec.Wav2Spectrogram()
+    s = converter.convert(open(filename), window_length=2048, window_step=1024, spectrum_type='magnitude', save_metadata=True)
+    mfcc_ex = mfcc.Mfcc()
+
+    track = mfcc_ex.calc_track(s, mfcc_coeff)
+
+    return track.data
+
+def thread_mfcc(work):
+    filename = work[0]
+    output_file = work[1]
+    coeffs = work[2]
+
+    print("Calculating MFCC coefficients for %s" % filename)
+
+    mfccs = calc_mfcc(filename, coeffs)
+    
+    mfccs = 20 * np.log( np.power(mfccs, 2) + np.finfo(float).eps)
+    mfccs = mfccs.T
+
+    mfccs = mfccs[:,50: 2550 ]
+
+    plt.imsave(output_file, mfccs[::-1], cmap=plt.get_cmap('Greys'))
+
+if __name__ == '__main__':
+
+    if len(sys.argv) < 5:
+        print ("usage: %s input_dir output_dir audio_extension mfcc_coeffs" % sys.argv[0])
+        exit(1)
+
+    input_dir = sys.argv[1]
+    output_dir = sys.argv[2]
+    extension = sys.argv[3]
+    mfcc_coeffs = int(sys.argv[4])
+    
+    if input_dir[-1] != '/':
+        input_dir += '/'
+
+    if output_dir[-1] != '/':
+        output_dir += '/'
+
+    print "%s*.%s" % (input_dir, extension)
+
+    audios = sorted(glob.glob("%s*.%s" % (input_dir, extension)))
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    if len(audios) <= 0:
+        print("No audio files found in input directory...")
+        exit(1)
+
+    output_files = []
+
+    for i in audios:
+        d = i.split("/")[-1]
+        filename = d.split(".")[0]
+        output_files.append( "%s%s.png" % (output_dir, filename) )
+
+    cs = [mfcc_coeffs] * len(audios)
+    
+    work = zip(audios, output_files, cs)
+
+    print work[0]
+
+    thread_mfcc(work[0])
+
+    pool = Pool(4)
+
+    pool.map(thread_mfcc, work)
+
+
