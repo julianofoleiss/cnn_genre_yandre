@@ -339,7 +339,8 @@ def tt(num_epochs=80,
     dropout=0.5,
     fcc_layers=1,
     filter_size=3,
-    early_stopping=0):
+    early_stopping=0,
+    early_criterion='loss'):
 
     print("Experiment parameters:")
     print("\tnum_epochs: %d" % (num_epochs))
@@ -350,6 +351,7 @@ def tt(num_epochs=80,
     print("\tfcc_layers: %d" % (fcc_layers))
     print("\tfilter_size: %d" % (filter_size))
     print("\tearly_stopping: %d" % (early_stopping))
+    print("\tearly_criterion: %s" % (early_criterion))
     print("\tmeta_slices_train: %s" % (meta_slices_train))
     print("\tmeta_full_train: %s" % (meta_full_train))
     print("\tmeta_slices_test: %s" % (meta_slices_test))
@@ -419,10 +421,12 @@ def tt(num_epochs=80,
         
         end_training = False
 
+        this_loss = (val_err / val_batches) if early_criterion == 'loss' else (val_acc / val_batches * 100)
+
         if estop:
-            if (val_err / val_batches) < prev_val_loss:
+            if this_loss < prev_val_loss:
                 best_epoch = epoch+1
-                prev_val_loss = val_err / val_batches
+                prev_val_loss = this_loss
                 best_param = get_params(network)
                 n_val_loss = 0
             else:
@@ -485,7 +489,7 @@ def tt(num_epochs=80,
 
 def cv(num_epochs=80, meta_slices_file="setme_slices", 
     meta_full_file="setme_full", batch_size=500, slices_per_track=50,
-    fcc_neurons=512, dropout=0.5, fcc_layers=1, filter_size=3, early_stopping=0):
+    fcc_neurons=512, dropout=0.5, fcc_layers=1, filter_size=3, early_stopping=0, early_criterion='loss'):
 
     print("Experiment parameters:")
     print("\tnum_epochs: %d" % (num_epochs))
@@ -496,6 +500,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
     print("\tfcc_layers: %d" % (fcc_layers))
     print("\tfilter_size: %d" % (filter_size))
     print("\tearly_stopping: %d" % (early_stopping))
+    print("\tearly_criterion: %s" % (early_criterion))
     print("\tmeta_slices_file: %s" % (meta_slices_file))
     print("\tmeta_full_file: %s" % (meta_full_file))
     
@@ -570,10 +575,12 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
 
             end_training = False
 
+            this_loss = (val_err / val_batches) if early_criterion == 'loss' else (val_acc / val_batches * 100)
+
             if estop:
-                if (val_err / val_batches) < prev_val_loss:
+                if this_loss < prev_val_loss:
                     best_epoch = epoch + 1
-                    prev_val_loss = (val_err / val_batches)
+                    prev_val_loss = this_loss
                     best_param = get_params(network)
                     n_val_loss = 0
                 else:
@@ -642,7 +649,7 @@ def print_usage():
     print("\nEvaluation-specific parameters:\n")
 
     if sys.argv[1] == 'cv':
-        print("Usage: %s cv [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [FCCLAYERS [FILTER_SIZE [EARLY_STOPPING [META_SLICES [META_FULL]]]]]]]]]]]" % sys.argv[0])
+        print("Usage: %s cv [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [FCCLAYERS [FILTER_SIZE [EARLY_STOPPING [EARLY_CRITERION [META_SLICES [META_FULL]]]]]]]]]]]]" % sys.argv[0])
         print("EPOCHS: number of training epochs to perform (default: 80)")
         print("BATCHSIZE: number of samples for each minibatch iteration")
         print("SLICESPERTRACK: number of slices per track. Currently all tracks must be split into an equal number of slices")
@@ -651,11 +658,12 @@ def print_usage():
         print("FCCLAYERS: Number of fully connected layers prior to the final softmax layer")
         print("FILTER_SIZE: Size of learnable convolutional filters (FILTER_SIZExFILTER_SIZE) ")
         print("EARLY_STOPPING: Number of stalled epochs to wait before early stopping. 0 indicates NO EARLY STOPPING.")
+        print("EARLY_CRITERION: Criterion for early stopping: \'loss\' for validation loss or \'acc\' for validation accuracy")
         print("META_SLICES: metadata filename that contains fullpath and labels for all spectrogram slices")
         print("META_FULL: metadata filename that contains fullpath and labels to full spectrograms. Must be in the same order as META_SLICES.")        
     else:
         if sys.argv[1] == 'tt':
-            print("Usage: %s tt [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [FCCLAYERS [FILTER_SIZE [META_SLICES_TRAIN [META_FULL_TRAIN [META_SLICES_TEST [META_FULL_TEST]]]]]]]]]]]" % sys.argv[0])
+            print("Usage: %s tt [EPOCHS [BATCHSIZE [SLICESPERTRACK [FCCNEURONS [DROPOUT [FCCLAYERS [FILTER_SIZE [EARLY_STOPPING [EARLY_CRITERION [META_SLICES_TRAIN [META_FULL_TRAIN [META_SLICES_TEST [META_FULL_TEST]]]]]]]]]]]]]" % sys.argv[0])
             print("EPOCHS: number of training epochs to perform (default: 80)")
             print("BATCHSIZE: number of samples for each minibatch iteration")
             print("SLICESPERTRACK: number of slices per track. Currently all tracks must be split into an equal number of slices")
@@ -664,6 +672,7 @@ def print_usage():
             print("FCCLAYERS: Number of fully connected layers prior to the final softmax layer")
             print("FILTER_SIZE: Size of learnable convolutional filters (FILTER_SIZExFILTER_SIZE) ")
             print("EARLY_STOPPING: Number of stalled epochs to wait before early stopping. 0 indicates NO EARLY STOPPING.")
+            print("EARLY_CRITERION: Criterion for early stopping: \'loss\' for validation loss or \'acc\' for validation accuracy")
             print("META_SLICES_TRAIN: metadata filename that contains fullpath and labels for all spectrogram slices (TRAINING DATA)")
             print("META_FULL_TRAIN: metadata filename that contains fullpath and labels to full spectrograms. Must be in the same order as META_SLICES. (TEST DATA)")
             print("META_SLICES_TEST: metadata filename that contains fullpath and labels for all spectrogram slices (TRAINING DATA)")
@@ -697,9 +706,11 @@ if __name__ == '__main__':
             if len(sys.argv) > 9:
                 kwargs['early_stopping'] = int(sys.argv[9])    
             if len(sys.argv) > 10:
-                kwargs['meta_slices_file'] = (sys.argv[10])
+                kwargs['early_criterion'] = sys.argv[10]
             if len(sys.argv) > 11:
-                kwargs['meta_full_file'] = (sys.argv[11])
+                kwargs['meta_slices_file'] = (sys.argv[11])
+            if len(sys.argv) > 12:
+                kwargs['meta_full_file'] = (sys.argv[12])
 
             cv(**kwargs)
         else:
@@ -720,15 +731,17 @@ if __name__ == '__main__':
                 if len(sys.argv) > 8:
                     kwargs['filter_size'] = int(sys.argv[8]) 
                 if len(sys.argv) > 9:
-                    kwargs['early_stopping'] = int(sys.argv[9])    
+                    kwargs['early_stopping'] = int(sys.argv[9])   
                 if len(sys.argv) > 10:
-                    kwargs['meta_slices_train'] = (sys.argv[10])
+                    kwargs['early_criterion'] = sys.argv[10] 
                 if len(sys.argv) > 11:
-                    kwargs['meta_full_train'] = (sys.argv[11])      
+                    kwargs['meta_slices_train'] = (sys.argv[11])
                 if len(sys.argv) > 12:
-                    kwargs['meta_slices_test'] = (sys.argv[12])
+                    kwargs['meta_full_train'] = (sys.argv[12])      
                 if len(sys.argv) > 13:
-                    kwargs['meta_full_test'] = (sys.argv[13])       
+                    kwargs['meta_slices_test'] = (sys.argv[13])
+                if len(sys.argv) > 14:
+                    kwargs['meta_full_test'] = (sys.argv[14])       
 
                 tt(**kwargs)          
 
