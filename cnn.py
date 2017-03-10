@@ -398,7 +398,7 @@ def tt(num_epochs=80,
 
     prev_val_loss = float("inf") if early_criterion == 'loss' else 0.0
     n_val_loss = 0
-    best_param = None
+    best_param = get_params(network)
     best_epoch = 1
 
     for epoch in xrange(num_epochs):
@@ -452,6 +452,10 @@ def tt(num_epochs=80,
         if end_training:
                 print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, val_err / val_batches))
                 break
+
+    if n_val_loss != 0:
+        set_params(network, best_param)
+        print('Params RESET to best known parameters!')
 
     if not end_training:
         print("EXECUTED EVERY EPOCH! Final validation error: %f" % (prev_val_loss))
@@ -578,11 +582,10 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
 
             this_score = (val_err / val_batches) if early_criterion == 'loss' else (val_acc / val_batches * 100)
 
-
             if estop:
                 if (this_score <= prev_val_loss and early_criterion == 'loss') or (this_score >= prev_val_loss and early_criterion == 'acc'):
                     best_epoch = epoch + 1
-                    prev_val_loss = this_loss
+                    prev_val_loss = this_score
                     best_param = get_params(network)
                     n_val_loss = 0
                 else:
@@ -606,6 +609,10 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
             if end_training:
                 print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, val_err / val_batches))
                 break
+
+        if n_val_loss != 0:
+            set_params(network, best_param)
+            print('Params RESET to best known parameters!')
 
         if not end_training:
             print("EXECUTED EVERY EPOCH! Final validation error: %f" % (prev_val_loss))
