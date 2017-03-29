@@ -369,7 +369,7 @@ def tt(num_epochs=80,
     fcc_layers=1,
     filter_size=3,
     early_stopping=0,
-    early_criterion='loss'):
+    early_criterion='acc'):
 
     print("Experiment parameters:")
     print("\tnum_epochs: %d" % (num_epochs))
@@ -478,7 +478,7 @@ def tt(num_epochs=80,
             sys.stdout.flush()
 
         if end_training:
-                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, val_err / val_batches))
+                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, (val_err if early_criterion == 'loss' else val_acc) / val_batches))
                 break
 
     if n_val_loss != 0:
@@ -490,7 +490,6 @@ def tt(num_epochs=80,
 
     y_true = []
     y_predicted = []
-    
 
     print("Training done!")
     print("Loading test data")
@@ -635,7 +634,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
                 sys.stdout.flush()
 
             if end_training:
-                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, val_acc / val_batches))
+                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, (val_err if early_criterion == 'loss' else val_acc) / val_batches))
                 break
 
         if n_val_loss != 0:
