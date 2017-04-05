@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
                 perf.append( [prec, rec, f1, supp] )
 
-                times.append(np.mean(fold_times))
+                times.append(np.sum(fold_times))
 
         print times
 
