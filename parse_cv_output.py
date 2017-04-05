@@ -16,7 +16,7 @@ if __name__ == "__main__":
     opt = sys.argv[-1]
 
     out = codecs.open(opt, mode='w', encoding='utf-8')
-    out.write("exp;acc;precision;recall;f1;avg_fold_train_time;final_val_err;\n")
+    out.write("exp;acc;precision;recall;f1;avg_fold_train_time;final_val_err; best_epoch, last_epoch;\n")
 
     for ipt in ipts:
 
@@ -27,8 +27,15 @@ if __name__ == "__main__":
         perf = []
         times = []
         val_err = []
+        max_epochs = 0
+        best_epoch = []
+        last_epoch = []
 
         for i in xrange(len(c)):
+
+            if "num_epochs" in c[i]:
+                d = c[i].split(" ")
+                max_epochs = int(d[-1])
 
             if "Epoch 1 " in c[i]:
                 fold_times = []
@@ -46,8 +53,15 @@ if __name__ == "__main__":
                 d = c[i].split(" ")
                 if d[0] == "STOPPED":
                     val_err.append(float(d[8]))
+                    le = int(d[4][:-1])
+                    be = int(d[10][:-2])
+                    best_epoch.append(be)
+                    last_epoch.append(le)
+
                 if d[0] == "EXECUTED":
                     val_err.append(float(d[6]))
+                    best_epoch.append(max_epochs)
+                    last_epoch.append(max_epochs)
 
             if "avg / total" in c[i]:
                 d = filter(None, c[i].split(" "))
@@ -59,7 +73,7 @@ if __name__ == "__main__":
                 perf.append( [prec, rec, f1, supp] )
                 times.append(np.sum(fold_times))
 
-        print val_err
+        #print val_err
 
         m = np.array(perf, dtype=object)
 
@@ -77,9 +91,16 @@ if __name__ == "__main__":
         err_avg = np.round(np.mean(val_err, dtype='float64'), decimals=2)
         err_std = np.round(np.std(val_err, dtype='float64'), decimals=2)
 
-        print acc_avg, acc_std, f_avg, f_std, time_avg, time_std, err_avg, err_std
+        be_avg = np.round(np.mean(best_epoch, dtype='float64'), decimals=2)
+        be_std = np.round(np.std(best_epoch, dtype='float64'), decimals=2)
 
-        out.write("%s;%.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f;\n" % (ipt, acc_avg, acc_std, f_avg[0], f_std[0], f_avg[1], f_std[1], f_avg[2], f_std[2], time_avg, time_std, err_avg, err_std))
+        le_avg = np.round(np.mean(last_epoch, dtype='float64'), decimals=2)
+        le_std = np.round(np.std(last_epoch, dtype='float64'), decimals=2)
+
+        print acc_avg, acc_std, f_avg, f_std, time_avg, time_std, err_avg, err_std, be_avg, be_std, le_avg, le_std
+
+        out.write("%s;%.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f;\n" % 
+            (ipt, acc_avg, acc_std, f_avg[0], f_std[0], f_avg[1], f_std[1], f_avg[2], f_std[2], time_avg, time_std, err_avg, err_std, be_avg, be_std, le_avg, le_std))
 
     out.close()
 
