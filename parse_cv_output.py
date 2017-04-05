@@ -16,7 +16,7 @@ if __name__ == "__main__":
     opt = sys.argv[-1]
 
     out = codecs.open(opt, mode='w', encoding='utf-8')
-    out.write("exp;acc;precision;recall;f1;\n")
+    out.write("exp;acc;precision;recall;f1;avg_fold_train_time;\n")
 
     for ipt in ipts:
 
@@ -25,8 +25,17 @@ if __name__ == "__main__":
 
         accs = []
         perf = []
+        times = []
 
         for i in xrange(len(c)):
+
+            if "Loading fold" in c[i]:
+                fold_times = []
+            
+            if "took" in c[i]:
+                t = c[i].split(" ")[-1]
+                t = t[:-2]
+                fold_times.append(float(t))
 
             if "Accuracy: " in c[i]:
                 d = c[i].split(" ")
@@ -41,6 +50,9 @@ if __name__ == "__main__":
 
                 perf.append( [prec, rec, f1, supp] )
 
+                times.append(np.mean(fold_times))
+
+        print times
 
         m = np.array(perf, dtype=object)
 
@@ -52,9 +64,12 @@ if __name__ == "__main__":
         acc_avg = np.round(np.mean(accs, axis=0, dtype='float64'), decimals=2)
         acc_std = np.round(np.std(accs, axis=0, dtype='float64'), decimals=2)
 
-        print acc_avg, acc_std, f_avg, f_std
+        time_avg = np.round(np.mean(times, dtype='float64'), decimals=2)
+        time_std = np.round(np.std(times, dtype='float64'), decimals=2)
 
-        out.write("%s;%.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f;\n" % (ipt, acc_avg, acc_std, f_avg[0], f_std[0], f_avg[1], f_std[1], f_avg[2], f_std[2]))
+        print acc_avg, acc_std, f_avg, f_std, time_avg, time_std
+
+        out.write("%s;%.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f;\n" % (ipt, acc_avg, acc_std, f_avg[0], f_std[0], f_avg[1], f_std[1], f_avg[2], f_std[2], time_avg, time_std))
 
     out.close()
 
