@@ -16,7 +16,7 @@ if __name__ == "__main__":
     opt = sys.argv[-1]
 
     out = codecs.open(opt, mode='w', encoding='utf-8')
-    out.write("exp;acc;precision;recall;f1;avg_fold_train_time;\n")
+    out.write("exp;acc;precision;recall;f1;avg_fold_train_time;final_val_err;\n")
 
     for ipt in ipts:
 
@@ -26,10 +26,11 @@ if __name__ == "__main__":
         accs = []
         perf = []
         times = []
+        val_err = []
 
         for i in xrange(len(c)):
 
-            if "Loading fold" in c[i]:
+            if "Epoch 1 " in c[i]:
                 fold_times = []
             
             if "took" in c[i]:
@@ -41,6 +42,13 @@ if __name__ == "__main__":
                 d = c[i].split(" ")
                 accs.append(float(d[1].strip()))
         
+            if "validation error:" in c[i]:
+                d = c[i].split(" ")
+                if d[0] == "STOPPED":
+                    val_err.append(float(d[8]))
+                if d[0] == "EXECUTED":
+                    val_err.append(float(d[6]))
+
             if "avg / total" in c[i]:
                 d = filter(None, c[i].split(" "))
                 prec = float(d[3])
@@ -49,10 +57,9 @@ if __name__ == "__main__":
                 supp = int(d[6].strip())
 
                 perf.append( [prec, rec, f1, supp] )
-
                 times.append(np.sum(fold_times))
 
-        print times
+        print val_err
 
         m = np.array(perf, dtype=object)
 
@@ -67,9 +74,12 @@ if __name__ == "__main__":
         time_avg = np.round(np.mean(times, dtype='float64'), decimals=2)
         time_std = np.round(np.std(times, dtype='float64'), decimals=2)
 
-        print acc_avg, acc_std, f_avg, f_std, time_avg, time_std
+        err_avg = np.round(np.mean(val_err, dtype='float64'), decimals=2)
+        err_std = np.round(np.std(val_err, dtype='float64'), decimals=2)
 
-        out.write("%s;%.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f;\n" % (ipt, acc_avg, acc_std, f_avg[0], f_std[0], f_avg[1], f_std[1], f_avg[2], f_std[2], time_avg, time_std))
+        print acc_avg, acc_std, f_avg, f_std, time_avg, time_std, err_avg, err_std
+
+        out.write("%s;%.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f; %.2f +- %.2f;\n" % (ipt, acc_avg, acc_std, f_avg[0], f_std[0], f_avg[1], f_std[1], f_avg[2], f_std[2], time_avg, time_std, err_avg, err_std))
 
     out.close()
 
