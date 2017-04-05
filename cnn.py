@@ -91,7 +91,7 @@ def print_cm(cm, labels, hide_labels=True, file=None, hide_zeroes=False, hide_di
 def load_image(work):
     i = open(work)
     img = Image.open(i)
-    #img = img.convert('RGB')
+    img = img.convert('RGB')
     #img = img.convert('L')
     out = np.asarray(img, dtype='float32') / 256.0
     out = np.reshape(out, (-1, out.shape[0], out.shape[1]))
@@ -111,7 +111,7 @@ def build_cnn3x3(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
     # and a fully-connected hidden layer in front of the output layer.
 
     # Input layer, as usual:
-    network = lasagne.layers.InputLayer(shape=(None, 1, 256, 16),
+    network = lasagne.layers.InputLayer(shape=(None, 3, 256, 16),
                                         input_var=input_var)
     # This time we do not apply input dropout, as it tends to work less well
     # for convolutional layers.
@@ -156,7 +156,7 @@ def build_cnn5x5(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
     # and a fully-connected hidden layer in front of the output layer.
 
     # Input layer, as usual:
-    network = lasagne.layers.InputLayer(shape=(None, 1, 256, 16),
+    network = lasagne.layers.InputLayer(shape=(None, 3, 256, 16),
                                         input_var=input_var)
     # This time we do not apply input dropout, as it tends to work less well
     # for convolutional layers.
@@ -303,19 +303,45 @@ def load_meta(meta_file):
         d = track.split("\t")
         names.append(d[0])
         labels_text.append(d[1].strip())
-    
+
     label_codes = {
-        'blues': 0,
-        'classical': 1,
-        'country': 2,
-        'disco': 3,
-        'hiphop': 4,
-        'jazz': 5,
-        'metal': 6,
-        'pop': 7,
-        'reggae': 8,
-        'rock': 9
+        'ChaChaCha': 0,
+        'Jive': 1,
+        'Quickstep': 2,
+        'Rumba-American': 3,
+        'Rumba-International': 4,
+        'Rumba-Misc': 5,
+        'Samba': 6,
+        'Tango': 7,
+        'VienneseWaltz': 8,
+        'Waltz': 9
     }
+
+#    label_codes = {
+#        'alternative': 0,
+#        'blues': 1,
+#        'electronic': 2,
+#        'folkcountry': 3,
+#        'funksoulrnb': 4,
+#        'jazz': 5,
+#        'pop': 6,
+#        'raphiphop': 7,
+#        'rock': 8
+#    }
+
+#    label_codes = {
+#        'blues': 0,
+#        'classical': 1,
+#        'country': 2,
+#        'disco': 3,
+#        'hiphop': 4,
+#        'jazz': 5,
+#        'metal': 6,
+#        'pop': 7,
+#        'reggae': 8,
+#        'rock': 9
+#    }
+
 
     labels = []
     for i in labels_text:
@@ -327,7 +353,9 @@ def load_meta(meta_file):
     return names, labels
 
 def get_class_names():
-    return ['blues', 'classical', 'country', 'disco', 'hiphop', 'jazz', 'metal', 'pop', 'reggae', 'rock']
+    return ['ChaChaCha', 'Jive', 'Quickstep', 'Rumba-American', 'Rumba-International', 'Rumba-Misc', 'Samba', 'Tango', 'VienneseWaltz', 'Waltz']
+    #return ['alternative', 'blues', 'electronic', 'folkcountry', 'funksoulrnb', 'jazz', 'pop', 'raphiphop', 'rock']
+    #return ['blues', 'classical', 'country', 'disco', 'hiphop', 'jazz', 'metal', 'pop', 'reggae', 'rock']
 
 def tt(num_epochs=80, 
     meta_slices_train="setme_ms_train", 
@@ -341,7 +369,7 @@ def tt(num_epochs=80,
     fcc_layers=1,
     filter_size=3,
     early_stopping=0,
-    early_criterion='loss'):
+    early_criterion='acc'):
 
     print("Experiment parameters:")
     print("\tnum_epochs: %d" % (num_epochs))
@@ -450,7 +478,7 @@ def tt(num_epochs=80,
             sys.stdout.flush()
 
         if end_training:
-                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, val_err / val_batches))
+                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, (val_err if early_criterion == 'loss' else val_acc) / val_batches))
                 break
 
     if n_val_loss != 0:
@@ -462,7 +490,6 @@ def tt(num_epochs=80,
 
     y_true = []
     y_predicted = []
-    
 
     print("Training done!")
     print("Loading test data")
@@ -520,7 +547,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
     slices_names, slices_labels = load_meta(meta_slices_file)
     full_names, full_labels = load_meta(meta_full_file)
 
-    skf = StratifiedKFold(n_splits=10)
+    skf = StratifiedKFold(n_splits=4)
 
     #print(labels)
     estop = True if early_stopping > 0 else False
@@ -597,7 +624,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
             else:
                 prev_val_loss = (val_err / val_batches)
 
-            if(epoch % 10 == 0 or epoch == (num_epochs - 1) or end_training == True):
+            if(epoch % 10 == 0 or epoch == (num_epochs - 1) or end_training == True or True):
                 # Then we print the results for this epoch:
                 print("Epoch {} of {} took {:.3f}s".format(
                     epoch + 1, num_epochs, time.time() - start_time))
@@ -607,7 +634,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
                 sys.stdout.flush()
 
             if end_training:
-                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, val_err / val_batches))
+                print("STOPPED EARLY! Last Epoch: %d, previous validation error: %f (epoch %d), this epoch: %f" % (epoch +1, prev_val_loss, best_epoch, (val_err if early_criterion == 'loss' else val_acc) / val_batches))
                 break
 
         if n_val_loss != 0:

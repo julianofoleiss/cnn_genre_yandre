@@ -5,8 +5,11 @@ import os
 from multiprocessing import Pool
 import traceback
 
-def get_song_duration(filename):
+def shellquote(s):
+    return "'" + s.replace("'", "'\\''") + "'"
 
+def get_song_duration(filename):
+    #filename = shellquote(filename)
     command = ['soxi', filename]
 
     proc = subprocess.check_output(command)
@@ -25,6 +28,8 @@ def human_readable(seconds):
     return h, m, s
 
 def trim_middle(infile, outfile, duration, length, mix_channels):
+    infile = shellquote(infile)
+    outfile = shellquote(outfile)
 
     if duration >= 60 and duration <= 90:
         ini = int((duration / 2) - (length / 2))
@@ -93,7 +98,7 @@ if __name__ == "__main__":
     for song in songs:
         duration = get_song_duration(song)
         filename = os.path.splitext(song)[0].split("/")[-1]
-        work.append((song, clipped_folder + filename + "_trimmed.mp3", duration, clipped_size, mix_channels))
+        work.append((song, clipped_folder + filename + ".mp3", duration, clipped_size, mix_channels))
 
     pool.map(trimmer_thread, work)
     

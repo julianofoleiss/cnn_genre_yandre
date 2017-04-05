@@ -4,6 +4,9 @@ import glob
 import os
 import sys
 
+def shellquote(s):
+    return "'" + s.replace("'", "'\\''") + "'"
+
 def output_spectrogram(path):
     command = "sox %s -n channels 1 spectrogram -y 256 -z %d -r -o %s %s" % (path[0], path[2], path[1], path[3])
     print ("executing %s" % command)
@@ -35,7 +38,10 @@ if __name__ == "__main__":
 
     audios = sorted(glob.glob("%s*.%s" % (input_dir, extension)))
 
+    audios = map(shellquote, audios)
+
     if not os.path.exists(output_dir):
+
         os.makedirs(output_dir)
 
     if len(audios) <= 0:
@@ -49,7 +55,10 @@ if __name__ == "__main__":
         filename = d.split(".")[0]
         output_files.append( "%s%s.png" % (output_dir, filename) )
 
+    output_files = map(shellquote, output_files)
+
     zs = [z] * len(output_files)
+    #gs = ['-m' if grayscale else '-h'] * len(output_files)
     gs = ['-m' if grayscale else ''] * len(output_files)
     work = zip(audios, output_files, zs, gs)
 
