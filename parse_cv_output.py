@@ -16,7 +16,7 @@ if __name__ == "__main__":
     opt = sys.argv[-1]
 
     out = codecs.open(opt, mode='w', encoding='utf-8')
-    out.write("exp;acc;precision;recall;f1;avg_fold_train_time;final_val_err; best_epoch, last_epoch;\n")
+    out.write("exp;acc;precision;recall;f1;avg_fold_train_time;final_val_err;best_epoch;last_epoch;\n")
 
     for ipt in ipts:
 
