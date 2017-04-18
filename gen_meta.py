@@ -2,6 +2,7 @@ import glob
 import os
 import sys
 import codecs
+from pprint import pprint
 
 if __name__ == '__main__':
     
@@ -38,7 +39,7 @@ if __name__ == '__main__':
     else:
         labels = dict()
 
-        with codecs.open(label_file, encoding='utf-8') as f:
+        with codecs.open(label_file) as f:
             c = f.readlines()
         
         for l in c:
@@ -47,6 +48,7 @@ if __name__ == '__main__':
 
         for f in spec_files:
             k = os.path.basename(f).split(".")[0] if not is_slices else os.path.basename(f).split(".")[0][:-3]
+	    #k = k.decode('utf-8')
             meta_file.write("%s/%s\t%s\n" % (os.getcwd(), f, labels[k]))
 
     meta_file.close()

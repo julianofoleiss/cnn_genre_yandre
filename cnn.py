@@ -145,7 +145,7 @@ def build_cnn3x3(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
 
     network = lasagne.layers.DenseLayer(
 	lasagne.layers.dropout(network, p=dropout),
-        num_units=10,
+        num_units=len(get_class_names()),
         nonlinearity=lasagne.nonlinearities.softmax
     )
 
@@ -190,7 +190,7 @@ def build_cnn5x5(input_var=None, fcc_neurons=500, dropout=0.5, fcc_layers=1):
 
     network = lasagne.layers.DenseLayer(
 	lasagne.layers.dropout(network, p=dropout),
-        num_units=10,
+        num_units=len(get_class_names()),
         nonlinearity=lasagne.nonlinearities.softmax
     )
 
@@ -305,17 +305,39 @@ def load_meta(meta_file):
         labels_text.append(d[1].strip())
 
     label_codes = {
-        'ChaChaCha': 0,
-        'Jive': 1,
-        'Quickstep': 2,
-        'Rumba-American': 3,
-        'Rumba-International': 4,
-        'Rumba-Misc': 5,
-        'Samba': 6,
-        'Tango': 7,
-        'VienneseWaltz': 8,
-        'Waltz': 9
+        'classical': 0,
+        'electronic': 1,
+        'jazz_blues': 2,
+        'metal_punk': 3,
+        'rock_pop': 4,
+        'world': 5
     }
+
+#    label_codes = {
+#        'ChaChaCha': 0,
+#        'Jive': 1,
+#        'Quickstep': 2,
+#        'Rumba-American': 3,
+#        'Rumba-International': 4,
+#        'Rumba-Misc': 5,
+#        'Samba': 6,
+#        'Tango': 7,
+#        'VienneseWaltz': 8,
+#        'Waltz': 9
+#    }
+
+#    label_codes = {
+#        'axe': 0,
+#        'bachata': 1,
+#        'bolero': 2,
+#        'forro': 3,
+#        'gaucha': 4,
+#        'merengue': 5,
+#        'pagode': 6,
+#        'salsa': 7,
+#        'sertaneja': 8,
+#        'tango': 9
+#    }
 
 #    label_codes = {
 #        'alternative': 0,
@@ -353,7 +375,9 @@ def load_meta(meta_file):
     return names, labels
 
 def get_class_names():
-    return ['ChaChaCha', 'Jive', 'Quickstep', 'Rumba-American', 'Rumba-International', 'Rumba-Misc', 'Samba', 'Tango', 'VienneseWaltz', 'Waltz']
+    #return ['classical', 'electronic', 'jazz_blues', 'metal_punk', 'rock_pop', 'world']
+    #return ['ChaChaCha', 'Jive', 'Quickstep', 'Rumba-American', 'Rumba-International', 'Rumba-Misc', 'Samba', 'Tango', 'VienneseWaltz', 'Waltz']
+    return ['axe', 'bachata', 'bolero', 'forro', 'gaucha', 'merengue', 'pagode', 'salsa', 'sertaneja', 'tango']
     #return ['alternative', 'blues', 'electronic', 'folkcountry', 'funksoulrnb', 'jazz', 'pop', 'raphiphop', 'rock']
     #return ['blues', 'classical', 'country', 'disco', 'hiphop', 'jazz', 'metal', 'pop', 'reggae', 'rock']
 
@@ -547,7 +571,7 @@ def cv(num_epochs=80, meta_slices_file="setme_slices",
     slices_names, slices_labels = load_meta(meta_slices_file)
     full_names, full_labels = load_meta(meta_full_file)
 
-    skf = StratifiedKFold(n_splits=4)
+    skf = StratifiedKFold(n_splits=10)
 
     #print(labels)
     estop = True if early_stopping > 0 else False
