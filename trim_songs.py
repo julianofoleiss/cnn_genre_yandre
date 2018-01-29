@@ -31,16 +31,21 @@ def trim_middle(infile, outfile, duration, length, mix_channels):
     infile = shellquote(infile)
     outfile = shellquote(outfile)
 
-    if duration >= 60 and duration <= 90:
-        ini = int((duration / 2) - (length / 2))
-        end = int((duration / 2) + (length / 2))-1
+    if (30 + length) > duration:
+        ini = (duration / 2) - (length / 2)
+        end = ini + length
     else:
-        if duration < 60:
+        if duration < length:
             ini = 0
-            end = duration-1
+            end = length
         else: 
             ini = 30
-            end = 90 
+            end = ini + length 
+
+    ini = int(ini)
+    end = int(end)
+
+    print ini, end, (end - ini)
 
     h, m, s = human_readable(ini)
     ini = "%02d:%02d:%02d" % (h, m, s)
@@ -73,13 +78,14 @@ def trimmer_thread(work):
 
 if __name__ == "__main__":
 
-    if len(sys.argv) < 4:
-        print("usage: %s mp3_folder clipped_folder clipped_size [mixchannels]" % (sys.argv[0]))
+    if len(sys.argv) < 5:
+        print("usage: %s song_folder clipped_folder clipped_size extension [mixchannels]" % (sys.argv[0]))
         exit(1)
 
     mp3folder = sys.argv[1]
     clipped_folder = sys.argv[2]
     clipped_size = int(sys.argv[3])
+    extension = sys.argv[4]
 
     mix_channels = True if "mixchannels" in sys.argv else False
 
@@ -89,16 +95,16 @@ if __name__ == "__main__":
     if not os.path.exists(clipped_folder):
         os.makedirs(clipped_folder)
 
-    songs = sorted([i for i in glob.glob( mp3folder + '/*.mp3')])
+    songs = sorted([i for i in glob.glob( mp3folder + '/*.' + extension)])
 
-    pool = Pool(4)
+    pool = Pool(2)
 
     work = []
 
     for song in songs:
         duration = get_song_duration(song)
         filename = os.path.splitext(song)[0].split("/")[-1]
-        work.append((song, clipped_folder + filename + ".mp3", duration, clipped_size, mix_channels))
+        work.append((song, clipped_folder + filename + "." + extension, duration, clipped_size, mix_channels))
 
     pool.map(trimmer_thread, work)
     
